@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="CardData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/card/CardData.gd" id="1_carddata"]
+
+[resource]
+script = ExtResource("1_carddata")
+id = "defender"
+display_name = "Defender"
+card_type = 1
+cost = 2
+description = "Low attack, high health. A simple front-line wall."
+attack = 1
+health = 7
+movement = 1
+attack_range = 1
+keywords = PackedStringArray("Guard")
+accent_color = Color(0.46, 0.48, 0.52, 1)
+

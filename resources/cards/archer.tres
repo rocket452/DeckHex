@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="CardData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/card/CardData.gd" id="1_carddata"]
+
+[resource]
+script = ExtResource("1_carddata")
+id = "archer"
+display_name = "Archer"
+card_type = 1
+cost = 2
+description = "A ranged creature. Shoots up to 3 hexes away and ignores line of sight."
+attack = 3
+health = 3
+movement = 2
+attack_range = 3
+accent_color = Color(0.24, 0.55, 0.34, 1)
+

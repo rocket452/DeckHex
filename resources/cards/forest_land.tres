@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="CardData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/card/CardData.gd" id="1_carddata"]
+
+[resource]
+script = ExtResource("1_carddata")
+id = "forest_land"
+display_name = "Forest Land"
+card_type = 0
+cost = 0
+description = "Play once per turn to grow your mana reserve by 1."
+mana_bonus = 1
+accent_color = Color(0.18, 0.47, 0.28, 1)
+

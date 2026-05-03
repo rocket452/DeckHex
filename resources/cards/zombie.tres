@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="CardData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/card/CardData.gd" id="1_carddata"]
+
+[resource]
+script = ExtResource("1_carddata")
+id = "zombie"
+display_name = "Zombie"
+card_type = 1
+cost = 1
+description = "Enemy fodder. Shambles 1 hex each turn and tries to surround the Hero."
+attack = 1
+health = 1
+movement = 1
+attack_range = 1
+keywords = PackedStringArray("Enemy")
+accent_color = Color(0.30, 0.44, 0.24, 1)
