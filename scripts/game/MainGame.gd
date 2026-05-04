@@ -1,16 +1,23 @@
 extends Control
 class_name MainGame
 
+signal battle_complete(winner: String, encounter_type: int)
+signal battle_started(encounter_type: int)
+
 const OWNER_PLAYER := "player"
 const OWNER_ENEMY := "enemy"
 const CARD_VIEW_SCENE := preload("res://scenes/CardView.tscn")
 const CREATURE_SCENE := preload("res://scenes/Creature.tscn")
 
+var current_encounter_type: EncounterType.Type = EncounterType.Type.PVP_ENCOUNTER
+
 var player: Player
 var enemy: Enemy
-var enemy_ai := EnemyAI.new()
 var creatures: Array[Creature] = []
 var hero: Creature
+
+var encounter_manager: EncounterManager = EncounterManager.new()
+var current_config: EncounterConfig = null
 var selected_creature: Creature
 var selected_card: CardData
 var selected_card_view: CardView
@@ -45,7 +52,7 @@ func _ready() -> void:
 	randomize()
 	_build_layout()
 	_connect_turn_signals()
-	_start_new_game()
+	# Note: Game no longer auto-starts. Use start_battle() to begin.
 
 
 func _build_layout() -> void:
@@ -227,11 +234,11 @@ func _build_end_overlay() -> void:
 	end_body_label.add_theme_color_override("font_color", Color(0.90, 0.88, 0.80, 1))
 	box.add_child(end_body_label)
 
-	var restart_button := Button.new()
-	restart_button.text = "Restart"
-	restart_button.custom_minimum_size = Vector2(150, 42)
-	restart_button.pressed.connect(_start_new_game)
-	box.add_child(restart_button)
+	var continue_button := Button.new()
+	continue_button.text = "Continue"
+	continue_button.custom_minimum_size = Vector2(150, 42)
+	continue_button.pressed.connect(_on_continue_pressed)
+	box.add_child(continue_button)
 
 
 func _add_stat_pill(parent: Control, text: String, color: Color) -> Label:
@@ -298,6 +305,15 @@ func _connect_turn_signals() -> void:
 		TurnManager.game_over.connect(_on_game_over)
 
 
+func start_battle(config: EncounterConfig = null) -> void:
+	if config == null:
+		config = EncounterConfig.new(EncounterType.Type.PVP_ENCOUNTER)
+	
+	current_config = config
+	current_encounter_type = config.encounter_type
+	battle_started.emit(config.encounter_type)
+	_start_new_game()
+
 func _start_new_game() -> void:
 	GameManager.load_cards()
 	_clear_creatures()
@@ -316,10 +332,23 @@ func _start_new_game() -> void:
 	player = Player.new()
 	enemy = Enemy.new()
 	player.setup("Player", GameManager.build_player_deck(), GameManager.STARTING_LIFE, GameManager.STARTING_HAND_SIZE)
-	enemy.setup(enemy.choose_display_name(), GameManager.build_enemy_deck(), GameManager.STARTING_LIFE, 0)
-	enemy_ai = EnemyAI.new()
+	
+	# Use encounter manager to setup the enemy based on encounter type
+	if current_config != null:
+		encounter_manager.current_config = current_config
+		encounter_manager.current_ai_controller = encounter_manager.create_ai_controller(self, current_config)
+		encounter_manager._apply_config_to_game(self, current_config)
+	else:
+		# Default setup for PvP
+		enemy.setup(enemy.choose_display_name(), GameManager.build_enemy_deck(), GameManager.STARTING_LIFE, 0)
+		encounter_manager.current_config = EncounterConfig.new(EncounterType.Type.PVP_ENCOUNTER)
+		encounter_manager.current_ai_controller = encounter_manager.create_ai_controller(self, encounter_manager.current_config)
+	
 	hero = spawn_hero()
-	spawn_initial_enemy_horde()
+	
+	# Initial spawns for rule-based encounters happen in AI start_turn
+	if encounter_manager.current_config == null or encounter_manager.current_config.ai_type == EncounterConfig.AIType.DECK_BASED:
+		spawn_initial_enemy_horde()
 
 	log_event("Your Hero takes the left-center spawn hex.")
 	log_event("Battle begins on a pointy-top hex grid.")
@@ -349,12 +378,30 @@ func _run_enemy_turn(turn_number: int) -> void:
 	_clear_selection()
 	for creature in get_enemy_creatures():
 		creature.begin_turn()
-	enemy.begin_turn(turn_number)
-	log_event("Enemy draws and refills mana.")
-	render_hand()
+	
+	# Get the appropriate AI controller from encounter manager
+	var ai_controller := encounter_manager.get_ai_controller()
+	if ai_controller == null:
+		# Fallback: create default deck-based AI
+		if current_config == null:
+			current_config = EncounterConfig.new(EncounterType.Type.PVP_ENCOUNTER)
+		ai_controller = encounter_manager.create_ai_controller(self, current_config)
+	
+	# Let AI prepare for turn (spawns, etc.)
+	ai_controller.start_turn()
+	
+	# Handle deck-based vs rule-based differently
+	if encounter_manager.current_config != null and encounter_manager.current_config.ai_type == EncounterConfig.AIType.DECK_BASED:
+		enemy.begin_turn(turn_number)
+		log_event("Enemy draws and refills mana.")
+		render_hand()
+	else:
+		# Rule-based enemies don't draw cards
+		log_event("Enemy prepares for battle.")
+	
 	update_ui()
 	_refresh_enemy_movement_highlights()
-	await enemy_ai.take_turn(self)
+	await ai_controller.take_turn()
 
 
 func _on_game_over(winner: String) -> void:
@@ -366,6 +413,10 @@ func _on_game_over(winner: String) -> void:
 	else:
 		end_title_label.text = "Defeat"
 		end_body_label.text = "Your Hero fell in battle."
+	battle_complete.emit(winner, current_encounter_type)
+
+func _on_continue_pressed() -> void:
+	end_overlay.visible = false
 
 
 func render_hand() -> void:
@@ -641,6 +692,14 @@ func spawn_creature(card: CardData, owner_id: String, cell: Vector2i, hero_unit 
 	creatures.append(creature)
 	_position_creature(creature, false)
 	_refresh_enemy_movement_highlights()
+	return creature
+
+
+func summon_enemy_creature(card: CardData, cell: Vector2i) -> Creature:
+	# Convenience method for AI controllers to spawn enemy creatures
+	var creature := spawn_creature(card, OWNER_ENEMY, cell, false)
+	if creature != null:
+		log_event("Enemy summons %s!" % card.display_name)
 	return creature
 
 
