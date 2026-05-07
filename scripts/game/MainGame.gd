@@ -46,6 +46,8 @@ var end_turn_button: Button
 var end_overlay: Control
 var end_title_label: Label
 var end_body_label: Label
+var unit_info_window: UnitInfoWindow
+var simulation_runner: SimulationRunner = null
 
 
 func _ready() -> void:
@@ -141,6 +143,11 @@ func _build_layout() -> void:
 	creature_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
 	board_control.add_child(creature_layer)
 	board_control.resized.connect(_layout_board)
+	
+	# Add unit info window
+	unit_info_window = preload("res://scenes/UnitInfoWindow.tscn").instantiate()
+	unit_info_window.name = "UnitInfoWindow"
+	add_child(unit_info_window)
 
 	var side_panel := PanelContainer.new()
 	side_panel.custom_minimum_size = Vector2(272, 0)
@@ -314,6 +321,19 @@ func start_battle(config: EncounterConfig = null) -> void:
 	battle_started.emit(config.encounter_type)
 	_start_new_game()
 
+func set_simulated_pvp_mode() -> void:
+	# Configure for simulated PvP: Lyonar vs Abyssian
+	var config := EncounterConfig.new(EncounterType.Type.PVP_ENCOUNTER)
+	config.player_deck = LyonarDeck.build_deck()
+	config.enemy_deck = AbyssianDeck.build_deck()
+	config.player_faction = "Lyonar"
+	config.enemy_faction = "Abyssian"
+	config.is_simulated_pvp = true
+	
+	# Set this as the current config
+	current_config = config
+	current_encounter_type = config.encounter_type
+
 func _start_new_game() -> void:
 	GameManager.load_cards()
 	_clear_creatures()
@@ -331,7 +351,18 @@ func _start_new_game() -> void:
 
 	player = Player.new()
 	enemy = Enemy.new()
-	player.setup("Player", GameManager.build_player_deck(), GameManager.STARTING_LIFE, GameManager.STARTING_HAND_SIZE)
+	
+	# Use faction-specific decks if configured
+	var player_deck = GameManager.build_player_deck()
+	var enemy_deck = GameManager.build_enemy_deck()
+	
+	if current_config != null and current_config.is_simulated_pvp:
+		if current_config.player_deck:
+			player_deck = current_config.player_deck
+		if current_config.enemy_deck:
+			enemy_deck = current_config.enemy_deck
+	
+	player.setup("Player", player_deck, GameManager.STARTING_LIFE, GameManager.STARTING_HAND_SIZE)
 	
 	# Use encounter manager to setup the enemy based on encounter type
 	if current_config != null:
@@ -347,8 +378,15 @@ func _start_new_game() -> void:
 	hero = spawn_hero()
 	
 	# Initial spawns for rule-based encounters happen in AI start_turn
-	if encounter_manager.current_config == null or encounter_manager.current_config.ai_type == EncounterConfig.AIType.DECK_BASED:
+	if encounter_manager.current_config == null:
 		spawn_initial_enemy_horde()
+	elif encounter_manager.current_config.ai_type == EncounterConfig.AIType.DECK_BASED:
+		if encounter_manager.current_config.is_simulated_pvp:
+			# Spawn enemy hero for simulated PvP
+			spawn_enemy_hero()
+		else:
+			# Spawn zombie horde for regular deck-based encounters
+			spawn_initial_enemy_horde()
 
 	log_event("Your Hero takes the left-center spawn hex.")
 	log_event("Battle begins on a pointy-top hex grid.")
@@ -356,6 +394,57 @@ func _start_new_game() -> void:
 	TurnManager.start_game()
 	_layout_board()
 
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed:
+		if event.button_index == MOUSE_BUTTON_RIGHT:
+			print("MainGame: Right click detected at %s" % str(event.global_position))
+			print("MainGame: unit_info_window exists: %s" % str(is_instance_valid(unit_info_window)))
+			_handle_unit_selection(event.global_position)
+
+func _handle_unit_selection(click_position: Vector2) -> void:
+	# Check if clicking on a creature or hero (anywhere on their hex tile)
+	var clicked_creature: Creature = null
+	
+	# Find which cell was clicked
+	var clicked_cell := _get_cell_at_position(click_position)
+	print("MainGame: Clicked cell: %s" % str(clicked_cell))
+	
+	# Debug: Show all creature positions
+	print("MainGame: All creatures:")
+	for creature in creatures:
+		if is_instance_valid(creature):
+			print("  - %s at cell %s, pos %s" % [creature.name, str(creature.cell), str(creature.global_position)])
+	
+	# Check if any creature occupies this cell
+	for creature in creatures:
+		if not is_instance_valid(creature):
+			continue
+		
+		if creature.cell == clicked_cell:
+			clicked_creature = creature
+			print("MainGame: Found creature %s at cell %s" % [creature.name, str(creature.cell)])
+			break
+	
+	if clicked_creature != null:
+		print("MainGame: Showing info for creature: %s" % clicked_creature.name)
+		unit_info_window.show_unit_info(clicked_creature)
+	else:
+		print("MainGame: No creature on clicked hex")
+		# Only hide if not clicking on the info window itself
+		if unit_info_window.visible and not unit_info_window.get_global_rect().has_point(click_position):
+			unit_info_window.hide_info()
+
+func _get_cell_at_position(pos: Vector2) -> Vector2i:
+	# Use GridManager's accurate hex detection
+	if not is_instance_valid(grid):
+		return Vector2i(-1, -1)
+	
+	# Convert global position to local position within the grid
+	var local_pos := pos - grid.global_position
+	
+	# Use GridManager's polygon-based detection
+	return grid.local_to_cell(local_pos)
 
 func _on_player_turn_started(turn_number: int) -> void:
 	for creature in get_player_creatures():
@@ -433,10 +522,10 @@ func update_ui() -> void:
 	if player == null or enemy == null:
 		return
 	var hero_health := 0
-	var hero_max_health := 25
+	var hero_max_health := 0
 	if is_instance_valid(hero):
 		hero_health = hero.current_health
-		hero_max_health = hero.max_health
+		hero_max_health = hero.card_data.health
 	hero_health_label.text = "Hero %d/%d" % [hero_health, hero_max_health]
 	hero_health_bar.max_value = hero_max_health
 	hero_health_bar.value = hero_health
@@ -672,7 +761,32 @@ func enemy_play_spell(card: CardData) -> bool:
 
 
 func spawn_hero() -> Creature:
-	var hero_card := GameManager.get_card("hero")
+	var hero_card: CardData = null
+	
+	# Find hero card in player's deck or hand
+	# Use specific keywords: "General", "Commander", or "Weaver" (unique to heroes)
+	# Avoid "Soul" which matches spells like "Soulshatter"
+	for card in player.deck:
+		if "General" in card.display_name or "Commander" in card.display_name or "Weaver" in card.display_name:
+			print("Found hero in deck: %s" % card.display_name)
+			hero_card = card
+			break
+	
+	# Check hand if not found in deck
+	if hero_card == null:
+		for card in player.hand:
+			if "General" in card.display_name or "Commander" in card.display_name or "Weaver" in card.display_name:
+				print("Found hero in hand: %s" % card.display_name)
+				hero_card = card
+				break
+	
+	# Fallback to default hero if no faction hero found
+	if hero_card == null:
+		print("WARNING: Faction hero not found, using default hero")
+		hero_card = GameManager.get_card("hero")
+	else:
+		print("Spawning player hero: %s (%d/%d)" % [hero_card.display_name, hero_card.attack, hero_card.health])
+	
 	var spawn_cell := grid.get_player_hero_spawn_cell()
 	return spawn_creature(hero_card, OWNER_PLAYER, spawn_cell, true)
 
@@ -682,6 +796,47 @@ func spawn_initial_enemy_horde() -> void:
 	for cell in grid.get_enemy_summon_cells():
 		if get_creature_at_cell(cell) == null:
 			spawn_creature(zombie_card, OWNER_ENEMY, cell)
+
+
+func spawn_enemy_hero() -> void:
+	# Find the hero card in enemy's deck or hand
+	var hero_card: CardData = null
+	
+	# Check deck first
+	# Use specific keywords to avoid matching spell cards
+	for card in enemy.deck:
+		if "General" in card.display_name or "Commander" in card.display_name or "Weaver" in card.display_name:
+			print("Found enemy hero in deck: %s" % card.display_name)
+			hero_card = card
+			break
+	
+	# Check hand if not found in deck
+	if hero_card == null:
+		for card in enemy.hand:
+			if "General" in card.display_name or "Commander" in card.display_name or "Weaver" in card.display_name:
+				print("Found enemy hero in hand: %s" % card.display_name)
+				hero_card = card
+				break
+	
+	# Fallback: use first card from deck if no hero found
+	if hero_card == null and enemy.deck.size() > 0:
+		hero_card = enemy.deck[0]
+		print("WARNING: Enemy hero not found, using first deck card: %s" % hero_card.display_name)
+	
+	if hero_card:
+		print("Spawning enemy hero: %s (%d/%d)" % [hero_card.display_name, hero_card.attack, hero_card.health])
+		# Spawn hero at right-center position
+		var hero_cell := Vector2i(grid.columns - 2, grid.rows / 2)
+		if get_creature_at_cell(hero_cell) == null:
+			var enemy_hero := spawn_creature(hero_card, OWNER_ENEMY, hero_cell, true)
+			log_event("Enemy %s takes the right-center spawn hex." % hero_card.display_name)
+		else:
+			# Fallback to any enemy spawn cell
+			for cell in grid.get_enemy_summon_cells():
+				if get_creature_at_cell(cell) == null:
+					spawn_creature(hero_card, OWNER_ENEMY, cell, true)
+					log_event("Enemy %s takes a spawn position." % hero_card.display_name)
+					break
 
 
 func spawn_creature(card: CardData, owner_id: String, cell: Vector2i, hero_unit := false) -> Creature:
@@ -1089,3 +1244,100 @@ func _check_game_over() -> void:
 		TurnManager.end_game(OWNER_PLAYER)
 	elif not is_instance_valid(hero) or hero.current_health <= 0:
 		TurnManager.end_game(OWNER_ENEMY)
+
+
+# ==================== AUTOPILOT SIMULATION SYSTEM ====================
+
+func start_autopilot_simulation(config: Dictionary = {}) -> void:
+	if simulation_runner == null:
+		simulation_runner = SimulationRunner.new()
+		add_child(simulation_runner)
+		
+		# Connect to signals
+		simulation_runner.simulation_started.connect(_on_simulation_started)
+		simulation_runner.simulation_finished.connect(_on_simulation_finished)
+		simulation_runner.turn_started.connect(_on_simulation_turn_started)
+		simulation_runner.turn_ended.connect(_on_simulation_turn_ended)
+	
+	# Default config
+	var sim_config := {
+		"player_faction": "lyonar",
+		"enemy_faction": "abyssian",
+		"simulation_speed": 2.0,  # 2x speed
+		"max_turns": 30,
+		"enable_logging": true,
+		"export_format": "json"
+	}
+	
+	# Merge with provided config
+	for key in config:
+		sim_config[key] = config[key]
+	
+	print("MainGame: Starting autopilot simulation with config: %s" % str(sim_config))
+	simulation_runner.run_single_simulation(self, sim_config)
+
+func stop_autopilot_simulation() -> void:
+	if simulation_runner != null and simulation_runner.is_simulation_running:
+		simulation_runner.stop_simulation()
+		print("MainGame: Autopilot simulation stopped")
+
+func is_simulation_running() -> bool:
+	return simulation_runner != null and simulation_runner.is_simulation_running
+
+func _on_simulation_started() -> void:
+	print("MainGame: Simulation started")
+
+func _on_simulation_finished(results: Dictionary) -> void:
+	print("MainGame: Simulation finished")
+	print("  Winner: %s" % results.winner)
+	print("  Turns: %d" % results.turns)
+	print("  Cards Played: %d" % results.data.card_plays.size())
+
+func _on_simulation_turn_started(turn_number: int, player: String) -> void:
+	print("MainGame: Turn %d started for %s" % [turn_number, player])
+
+func _on_simulation_turn_ended(turn_number: int, player: String) -> void:
+	print("MainGame: Turn %d ended for %s" % [turn_number, player])
+
+func run_batch_simulations(count: int, config: Dictionary = {}) -> void:
+	if simulation_runner == null:
+		simulation_runner = SimulationRunner.new()
+		add_child(simulation_runner)
+		
+		simulation_runner.simulation_started.connect(_on_simulation_started)
+		simulation_runner.simulation_finished.connect(_on_simulation_finished)
+	
+	var sim_config := {
+		"player_faction": "lyonar",
+		"enemy_faction": "abyssian",
+		"simulation_speed": 5.0,  # 5x speed for batch
+		"max_turns": 30,
+		"enable_logging": true,
+		"export_format": "csv"
+	}
+	
+	for key in config:
+		sim_config[key] = config[key]
+	
+	print("MainGame: Starting batch of %d simulations" % count)
+	simulation_runner.run_batch_simulations(count, self, sim_config)
+
+func get_simulation_stats() -> Dictionary:
+	if simulation_runner == null:
+		return {"error": "No simulation running"}
+	return simulation_runner.get_current_stats()
+
+# Helper function to get blocked cells for pathfinding
+func _get_blocked_cells() -> Dictionary:
+	var blocked := {}
+	for creature in creatures:
+		if is_instance_valid(creature):
+			blocked[creature.cell] = true
+	return blocked
+
+# Helper to get enemy hero
+func get_enemy_hero() -> Creature:
+	for creature in creatures:
+		if is_instance_valid(creature) and creature.is_hero and creature.owner_id == OWNER_ENEMY:
+			return creature
+	return null

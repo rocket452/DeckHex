@@ -59,8 +59,11 @@ func _setup_deck_enemy(game: MainGame, config: EncounterConfig) -> void:
 	game.enemy.deck.clear()
 	game.enemy.hand.clear()
 	
+	# Use configured enemy deck or default
+	var enemy_deck = config.enemy_deck if config.enemy_deck else GameManager.build_enemy_deck()
+	
 	# Populate deck
-	for card in config.enemy_deck:
+	for card in enemy_deck:
 		game.enemy.deck.append(card)
 	
 	game.enemy.deck.shuffle()
@@ -69,7 +72,17 @@ func _setup_deck_enemy(game: MainGame, config: EncounterConfig) -> void:
 	for i in range(GameManager.STARTING_HAND_SIZE):
 		game.enemy.draw_cards(1)
 	
+	# Log faction info if available
+	if config.is_simulated_pvp and config.enemy_faction:
+		game.log_event("Enemy faction: %s" % config.enemy_faction)
+		game.log_event("Enemy deck: %d cards" % enemy_deck.size())
+	
 	game.log_event("Enemy draws %d cards." % GameManager.STARTING_HAND_SIZE)
+	
+	# For simulated PvP, ensure enemy has proper setup
+	if config.is_simulated_pvp:
+		# Enemy mana setup will be handled by the standard game flow
+		pass
 
 
 func _setup_rule_based_enemy(game: MainGame, config: EncounterConfig) -> void:

@@ -74,6 +74,10 @@ func setup(data: CardData, owner: String, start_cell: Vector2i, current_turn: in
 	elif _uses_animated_sprite():
 		custom_minimum_size = Vector2(136, 136)
 		size = custom_minimum_size
+	else:
+		# Smaller size for cards without animated sprites (better hex fit)
+		custom_minimum_size = Vector2(80, 80)
+		size = custom_minimum_size
 	summoned_turn = current_turn
 	moved_this_turn = false
 	attacked_this_turn = false

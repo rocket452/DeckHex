@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="DeckHex"
-run/main_scene="res://scenes/RunMapManager.tscn"
+run/main_scene="res://scenes/GameLauncher.tscn"
 config/features=PackedStringArray("4.4")
 config/icon="res://icon.svg"
 

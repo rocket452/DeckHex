@@ -15,8 +15,14 @@ var description: String
 
 # Enemy setup
 var enemy_deck: Array[CardData] = []  # For DECK_BASED AI
+var player_deck: Array[CardData] = []  # For simulated PvP
 var spawn_rules: Array[SpawnRule] = []  # For RULE_BASED/ELITE/BOSS AI
 var enemy_life: int = 20
+
+# Faction info for simulated PvP
+var player_faction: String = ""
+var enemy_faction: String = ""
+var is_simulated_pvp: bool = false
 
 # Turn rules
 var player_draw_per_turn: int = 1

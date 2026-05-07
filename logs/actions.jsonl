@@ -1,0 +1,5 @@
+{"ts": 1777893805.98953, "run_id": "768b24cb01cf4730813e169f67b58a86", "step": 1, "action": {"id": "attack"}, "decision": {"reason": "policy_choice=attack"}}
+{"ts": 1777893806.0015192, "run_id": "768b24cb01cf4730813e169f67b58a86", "step": 2, "action": {"id": "attack"}, "decision": {"reason": "policy_choice=attack"}}
+{"ts": 1777893806.0016887, "run_id": "768b24cb01cf4730813e169f67b58a86", "step": 3, "action": {"id": "attack"}, "decision": {"reason": "policy_choice=attack"}}
+{"ts": 1777893806.0026126, "run_id": "768b24cb01cf4730813e169f67b58a86", "step": 4, "action": {"id": "attack"}, "decision": {"reason": "policy_choice=attack"}}
+{"ts": 1777893806.0031285, "run_id": "768b24cb01cf4730813e169f67b58a86", "step": 5, "action": {"id": "attack"}, "decision": {"reason": "policy_choice=attack"}}
