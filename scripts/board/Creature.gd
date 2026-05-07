@@ -21,9 +21,9 @@ const ZOMBIE_MOVE_ANIMATION := "run"
 const ZOMBIE_ATTACK_ANIMATION := "attack"
 const ZOMBIE_DEATH_ANIMATION := "death"
 const ZOMBIE_HIT_ANIMATION := "hit"
-const HERO_BASE_OFFSET := Vector2(-8.5, 33.0)
-const ARCHER_BASE_OFFSET := Vector2(-1.5, 23.0)
-const ZOMBIE_BASE_OFFSET := Vector2(1.0, 48.0)
+const HERO_BASE_OFFSET := Vector2(-8.5, 15.0)
+const ARCHER_BASE_OFFSET := Vector2(-1.5, 5.0)
+const ZOMBIE_BASE_OFFSET := Vector2(1.0, 30.0)
 const ATTACK_DAMAGE_FRAME := 3
 
 var card_data: CardData
@@ -42,7 +42,7 @@ var is_dying := false
 var unit_sprite_frames: SpriteFrames
 var unit_animation_ticket := 0
 
-@onready var label: Label = $Label
+@onready var label: RichTextLabel = $Label
 @onready var hero_sprite: AnimatedSprite2D = $HeroSprite
 
 
@@ -73,6 +73,10 @@ func setup(data: CardData, owner: String, start_cell: Vector2i, current_turn: in
 		size = custom_minimum_size
 	elif _uses_animated_sprite():
 		custom_minimum_size = Vector2(136, 136)
+		size = custom_minimum_size
+	else:
+		# Smaller size for cards without animated sprites (better hex fit)
+		custom_minimum_size = Vector2(80, 80)
 		size = custom_minimum_size
 	summoned_turn = current_turn
 	moved_this_turn = false
@@ -141,19 +145,15 @@ func _refresh_label() -> void:
 	if not is_inside_tree() or card_data == null:
 		return
 	var initial := card_data.display_name.substr(0, 1).to_upper()
-	if is_hero:
-		initial = "ATK"
 	var exhausted := ""
 	if moved_this_turn or attacked_this_turn:
 		exhausted = "*"
-	if is_hero:
-		label.text = "%s%d  HP %d%s" % [initial, attack, current_health, exhausted]
-	elif _is_zombie():
-		label.text = "%d/%d%s" % [attack, current_health, exhausted]
+	var health_color := "#FAF5DC" if current_health >= max_health else "#FF4444"
+	if is_hero or _is_zombie():
+		label.text = "[center]%d/[color=%s]%d[/color]%s[/center]" % [attack, health_color, current_health, exhausted]
 	else:
-		label.text = "%s%s\n%d/%d" % [initial, exhausted, attack, current_health]
-	label.add_theme_color_override("font_color", Color(0.98, 0.96, 0.86, 1))
-	label.add_theme_font_size_override("font_size", 28 if is_hero else 16)
+		label.text = "[center]%s%s\n%d/[color=%s]%d[/color][/center]" % [initial, exhausted, attack, health_color, current_health]
+	label.add_theme_font_size_override("normal_font_size", 16)
 
 
 func _configure_hero_sprite() -> void:
@@ -180,19 +180,19 @@ func _layout_hero_visual() -> void:
 	if is_hero:
 		hero_sprite.scale = Vector2(2.56, 2.56)
 		hero_sprite.position = _sprite_position_for_base(HERO_BASE_OFFSET)
-		label.offset_top = -54.0
+		label.offset_top = -50.0
 	elif _is_archer():
 		hero_sprite.scale = Vector2(2.56, 2.56)
 		hero_sprite.position = _sprite_position_for_base(ARCHER_BASE_OFFSET)
-		label.offset_top = -38.0
+		label.offset_top = -40.0
 	elif _is_zombie():
 		hero_sprite.scale = Vector2(2.56, 2.56)
 		hero_sprite.position = _sprite_position_for_base(ZOMBIE_BASE_OFFSET)
-		label.offset_top = -38.0
+		label.offset_top = -40.0
 	else:
 		hero_sprite.position = Vector2(size.x * 0.5, size.y * 0.5)
 		hero_sprite.scale = Vector2.ONE
-		label.offset_top = -24.0
+		label.offset_top = -30.0
 
 
 func _sprite_position_for_base(base_offset: Vector2) -> Vector2:

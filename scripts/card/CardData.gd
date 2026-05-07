@@ -16,6 +16,7 @@ enum CardType { LAND, CREATURE, SPELL }
 @export var mana_bonus := 0
 @export var keywords: PackedStringArray = PackedStringArray()
 @export var accent_color := Color(0.25, 0.3, 0.34, 1.0)
+@export var sprite_frames_path := ""
 
 
 func is_land() -> bool:
